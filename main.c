@@ -9,6 +9,7 @@
 #define FISH_SPEED 50.0f
 #define FISH_RANGE 200.0f
 static Fish FISHES[MAX_FISH];
+static Node FISH_POOL;
 
 #define MAX_FOOD 10
 #define FOOD_SPEED 30.0f
@@ -32,7 +33,7 @@ int main()
 
 void init_game() 
 {
-    // Pool allocator for food for some reason
+    // Pool allocators for the entities
     // Since sysetms will iterate over the pool regardless of the memory being allocated or not
     // we have to set a flag for them to check
     Node *head = &FOOD_POOL;
@@ -42,48 +43,82 @@ void init_game()
         FOOD[i].id = -1;
     }
 
+    head = &FISH_POOL;
     for(int i = 0; i < MAX_FISH; i++) {
-        FISHES[i] = (Fish){
+        head->next = (Node *)(FISHES+i);
+        head = head->next;
+        FISHES[i].tracking_status = DEAD;
+    }
+
+    for(int i = 0; i < MAX_FISH; i++) {
+        spawn_fish((Fish){
             (Vector2){(float)rand() / RAND_MAX * WIDTH, (float)rand() / RAND_MAX * HEIGHT}, 
-            (Vector2){(float)rand() / RAND_MAX * WIDTH, (float)rand() / RAND_MAX * HEIGHT}, 
-            0,
+            (Vector2){0.0f, 0.0f}, 
+            10,
             RANDOM_TRACKING,
-        };
+            FAILED,
+        });
     }
 }
 
 void update() 
 {
-    update_tracking();
-    update_pos();
+    update_feeding();
     update_hunger();
+    update_tracking();
+    update_next_pos();
+    update_pos();
+    clear_events();
 
     if(IsMouseButtonPressed(0)) {
         place_food((Food){GetMousePosition(), 0});
     }
-}
 
+    if(IsMouseButtonPressed(1)) {
+        spawn_fish((Fish){
+            (Vector2){GetMouseX(), GetMouseY()}, 
+            (Vector2){0.0f, 0.0f},
+            10,
+            RANDOM_TRACKING,
+            FAILED,
+        });
+    }
+}
 
 void update_hunger() 
 {
     for(int i = 0; i < MAX_FISH; i++) {
         Fish *cur_fish = FISHES + i;
-        cur_fish->hunger += 5;
+        if(cur_fish->tracking_status == DEAD) {
+            continue;
+        } else if(cur_fish->tracking_status & SUCCESS) {
+            cur_fish->hunger += 5;
+        } else if (cur_fish->hunger > 5){
+            cur_fish->hunger -= 1.0f * GetFrameTime();
+        } else {
+            destroy_fish(i);
+        }
     }
 }
 
 void update_feeding()
 {
     for(int i = 0; i < MAX_FISH; i++) {
+        if(FISHES[i].tracking_status == DEAD) {
+            continue;
+        }
         Fish *cur_fish = FISHES + i;
 
         bool fish_tracking = cur_fish->tracking_food != RANDOM_TRACKING;
-        bool food_not_null = FOOD[cur_fish->tracking_food].id != -1;
-        if(fish_tracking && food_not_null) {
-            bool food_in_range = Vector2Distance(cur_fish->next_pos, cur_fish->pos) < 0.1;
-            if(food_in_range) {
+        if(fish_tracking) {
+            bool food_in_range = Vector2Distance(cur_fish->pos, FOOD[cur_fish->tracking_food].pos) < 0.1;
+            bool food_null = FOOD[cur_fish->tracking_food].id == -1;
+
+            if(food_in_range && !food_null) {
                 destroy_food(cur_fish->tracking_food);
-                cur_fish->ate_food = true;
+                cur_fish->tracking_status = SUCCESS;
+            } else if(food_null) {
+                cur_fish->tracking_status = FAILED;
             }
         }
     }
@@ -92,11 +127,14 @@ void update_feeding()
 void update_tracking()
 {            
     for(int i = 0; i < MAX_FISH; i++) {
+        if(FISHES[i].tracking_status == DEAD) {
+            continue;
+        }
         Fish *cur_fish = FISHES + i;
 
-        if(cur_fish->tracking_food == RANDOM_TRACKING) {
+        if(~(cur_fish->tracking_status & TRACKING)) {
             int min_dist_idx = -1;
-            float min_dist = 10000000.0f;
+            float min_dist = FLT_MAX;
 
             for(int j = 0; j < MAX_FOOD; j++) {
                 if(FOOD[j].id == -1) {
@@ -109,8 +147,14 @@ void update_tracking()
                     min_dist = dist;
                 }
             }
-        } else if(cur_fish->ate_food) {
-            cur_fish->tracking_food = RANDOM_TRACKING;
+
+            if(min_dist_idx != -1) {
+                cur_fish->tracking_status = TRACKING;
+                cur_fish->tracking_food = min_dist_idx;
+            } else {
+                cur_fish->tracking_status |= RANDOM;
+                cur_fish->tracking_food = RANDOM_TRACKING;
+            }
         }
     }
 }
@@ -118,35 +162,41 @@ void update_tracking()
 void update_next_pos()
 {
     for(int i = 0; i < MAX_FISH; i++) {
+        if(FISHES[i].tracking_status == DEAD) {
+            continue;
+        }
         Fish *cur_fish = FISHES + i;
         bool needs_new_random = false;
 
-        if (cur_fish->tracking_food != RANDOM_TRACKING) {
+        if(cur_fish->tracking_status & TRACKING) {
             cur_fish->next_pos = FOOD[cur_fish->tracking_food].pos;
-        }
-        else if(cur_fish->ate_food) {
+        } else if(cur_fish->tracking_status & (SUCCESS | FAILED)) {
             needs_new_random = true;
         } else {
-            bool reached_dest = Vector2Distance(cur_fish->pos, cur_fish->next_pos);
+            bool reached_dest = Vector2Distance(cur_fish->pos, cur_fish->next_pos) < 0.1;
             if(reached_dest) {
                 needs_new_random = true;
             }
         }
 
         if(needs_new_random) {
-            cur_fish->next_pos.x = (rand() / RAND_MAX) * WIDTH;
-            cur_fish->next_pos.y = (rand() / RAND_MAX) * HEIGHT;
+            cur_fish->next_pos.x = ((float)rand() / RAND_MAX) * WIDTH;
+            cur_fish->next_pos.y = ((float)rand() / RAND_MAX) * HEIGHT;
         }
     }
 }
 
 void update_pos() 
 {
+    float dt = GetFrameTime();
     for(int i = 0; i < MAX_FISH; i++) {
+        if(FISHES[i].tracking_status == DEAD) {
+            continue;
+        }
         Fish *cur_fish = FISHES + i;
 
-        float dx = SIGN(cur_fish->next_pos.x - cur_fish->pos.x) * FISH_SPEED * GetFrameTime();
-        float dy = SIGN(cur_fish->next_pos.y - cur_fish->pos.y) * FISH_SPEED * GetFrameTime();
+        float dx = SIGN(cur_fish->next_pos.x - cur_fish->pos.x) * FISH_SPEED * dt;
+        float dy = SIGN(cur_fish->next_pos.y - cur_fish->pos.y) * FISH_SPEED * dt;
 
         cur_fish->pos.x += dx;
         cur_fish->pos.y += dy;
@@ -156,7 +206,7 @@ void update_pos()
         Food *cur_food = FOOD + i;
 
         if(cur_food->id != -1) {
-            cur_food->pos.y += FOOD_SPEED * GetFrameTime();
+            cur_food->pos.y += FOOD_SPEED * dt;
             if(cur_food->pos.y > HEIGHT) {
                 destroy_food(i);
             }
@@ -167,9 +217,12 @@ void update_pos()
 void clear_events() 
 {
     for(int i = 0; i < MAX_FISH; i++) {
+        if(FISHES[i].tracking_status == DEAD) {
+            continue;
+        }
         Fish *cur_fish = FISHES + i;
 
-        cur_fish->ate_food = false;
+        cur_fish->tracking_status = RANDOM;
     }
 }
 
@@ -191,7 +244,7 @@ void draw()
 
     for(int i = 0; i < MAX_FISH; i++) {
         Fish *cur_fish = FISHES + i;
-        DrawCircle((int)cur_fish->pos.x, (int)cur_fish->pos.y, cur_fish->hunger+10, RAYWHITE);
+        DrawCircle((int)cur_fish->pos.x, (int)cur_fish->pos.y, cur_fish->hunger, RAYWHITE);
     }
 
     for(int i = 0; i < MAX_FOOD; i++) {
@@ -218,4 +271,20 @@ void destroy_food(int idx)
     FOOD[idx].id = -1;
     ((Node *)(FOOD + idx))->next = FOOD_POOL.next;
     FOOD_POOL.next = (Node *)(FOOD + idx);
+}
+
+void spawn_fish(Fish fish)
+{
+    if(FISH_POOL.next) {
+        Node *temp = FISH_POOL.next->next;
+        *(Fish *)FISH_POOL.next = fish;
+        FISH_POOL.next = temp;
+    }
+}
+
+void destroy_fish(int idx) 
+{
+    FISHES[idx].tracking_status = DEAD;
+    ((Node *)(FISHES + idx))->next = FISH_POOL.next;
+    FISH_POOL.next = (Node *)(FISHES + idx);
 }

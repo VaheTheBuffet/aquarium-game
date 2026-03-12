@@ -228,25 +228,29 @@ void clear_events()
 
 void draw() 
 {
-    ClearBackground(BLACK);
     BeginDrawing();
+    ClearBackground(BLACK);
 
+    draw_debug();
+    draw_fish();
+    draw_fish_range();
+    draw_food();
+
+    EndDrawing();
+}
+
+void draw_debug()
+{
     char debug_text[100];
     sprintf(debug_text, "Next Point: (%f, %f)", FISHES[0].next_pos.x, FISHES[0].next_pos.y);
     DrawText(debug_text, 0, 0, 20, RAYWHITE);
     sprintf(debug_text, "Tracking: %s ", FISHES[0].tracking_food == RANDOM_TRACKING ? "random" : "food");
     DrawText(debug_text, 0, 22, 20, RAYWHITE);
 
-//    for(int i = 0; i < MAX_FISH; i++) {
-//        Fish *cur_fish = FISHES + i;
-//        DrawCircleLines((int)cur_fish->pos.x, (int)cur_fish->pos.y, FISH_RANGE, BLUE);
-//    }
+}
 
-    for(int i = 0; i < MAX_FISH; i++) {
-        Fish *cur_fish = FISHES + i;
-        DrawCircle((int)cur_fish->pos.x, (int)cur_fish->pos.y, cur_fish->hunger, RAYWHITE);
-    }
-
+void draw_food()
+{
     for(int i = 0; i < MAX_FOOD; i++) {
         Food *cur_food = FOOD + i;
         if(cur_food->id != -1) {
@@ -254,7 +258,23 @@ void draw()
         }
     }
 
-    EndDrawing();
+}
+
+void draw_fish() 
+{
+    for(int i = 0; i < MAX_FISH; i++) {
+        Fish *cur_fish = FISHES + i;
+        DrawCircle((int)cur_fish->pos.x, (int)cur_fish->pos.y, cur_fish->hunger, RAYWHITE);
+    }
+
+}
+
+void draw_fish_range()
+{
+    for(int i = 0; i < MAX_FISH; i++) {
+        Fish *cur_fish = FISHES + i;
+        DrawCircleLines((int)cur_fish->pos.x, (int)cur_fish->pos.y, FISH_RANGE, BLUE);
+    }
 }
 
 void place_food(Food food)

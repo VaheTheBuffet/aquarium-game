@@ -37,15 +37,21 @@ typedef struct Food {
 
 
 void init_game();
-void update();
-void draw();
-void place_food(Food food);
-void destroy_food(int idx);
+
 void update_tracking();
 void update_next_pos();
 void update_hunger();
 void update_feeding();
 void update_pos();
+void update();
+
+void draw_debug();
+void draw_food();
+void draw_fish();
+void draw_fish_range();
+
+void place_food(Food food);
+void destroy_food(int idx);
 void clear_events();
 void spawn_fish(Fish fish);
 void destroy_fish(int idx);

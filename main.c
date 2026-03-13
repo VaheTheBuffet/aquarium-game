@@ -2,6 +2,7 @@
 
 #define WIDTH 800
 #define HEIGHT 600
+#define MENU_PAD 100
 #define TITLE "Game"
 
 #define RANDOM_TRACKING -1
@@ -16,9 +17,13 @@ static Node FISH_POOL;
 static Food FOOD[MAX_FOOD];
 static Node FOOD_POOL;
 
+static Texture PANEL;
+
 int main() 
 {
     InitWindow(WIDTH, HEIGHT, TITLE);
+
+    PANEL = LoadTexture("./assets/panel-wide.png");
 
     init_game();
 
@@ -69,14 +74,23 @@ void update()
     update_next_pos();
     update_pos();
     clear_events();
+    handle_input();
+}
 
+void handle_input()
+{
     if(IsMouseButtonPressed(0)) {
-        place_food((Food){GetMousePosition(), 0});
+        Vector2 pos = GetMousePosition();
+        if(pos.y < MENU_PAD) {
+            pos.y = MENU_PAD;
+        }
+        
+        place_food((Food){pos, 0});
     }
 
     if(IsMouseButtonPressed(1)) {
         spawn_fish((Fish){
-            (Vector2){GetMouseX(), GetMouseY()}, 
+            GetMousePosition(), 
             (Vector2){0.0f, 0.0f},
             10,
             RANDOM_TRACKING,
@@ -181,7 +195,7 @@ void update_next_pos()
 
         if(needs_new_random) {
             cur_fish->next_pos.x = ((float)rand() / RAND_MAX) * WIDTH;
-            cur_fish->next_pos.y = ((float)rand() / RAND_MAX) * HEIGHT;
+            cur_fish->next_pos.y = ((float)rand() / RAND_MAX) * (HEIGHT - MENU_PAD) + MENU_PAD;
         }
     }
 }
@@ -229,12 +243,13 @@ void clear_events()
 void draw() 
 {
     BeginDrawing();
-    ClearBackground(BLACK);
+    ClearBackground(DARKBLUE);
 
     draw_debug();
     draw_fish();
     draw_fish_range();
     draw_food();
+    draw_menu();
 
     EndDrawing();
 }
@@ -257,24 +272,37 @@ void draw_food()
             DrawCircle(cur_food->pos.x, cur_food->pos.y, 10, RED);
         }
     }
-
 }
 
 void draw_fish() 
 {
     for(int i = 0; i < MAX_FISH; i++) {
         Fish *cur_fish = FISHES + i;
+        if(cur_fish->tracking_status & DEAD) {
+            continue;
+        }
         DrawCircle((int)cur_fish->pos.x, (int)cur_fish->pos.y, cur_fish->hunger, RAYWHITE);
     }
-
 }
 
 void draw_fish_range()
 {
     for(int i = 0; i < MAX_FISH; i++) {
         Fish *cur_fish = FISHES + i;
+        if(cur_fish->tracking_status & DEAD) {
+            continue;
+        }
         DrawCircleLines((int)cur_fish->pos.x, (int)cur_fish->pos.y, FISH_RANGE, BLUE);
     }
+}
+
+void draw_menu()
+{
+    Rectangle source = {0, 0, PANEL.width, PANEL.height};
+    Rectangle dest = {0, 0, WIDTH, MENU_PAD};
+    Vector2 origin = {0, 0,};
+
+    DrawTexturePro(PANEL, source, dest, origin, 0.0f, RAYWHITE);
 }
 
 void place_food(Food food)

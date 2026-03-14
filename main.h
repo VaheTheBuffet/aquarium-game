@@ -58,5 +58,7 @@ void destroy_food(int idx);
 void clear_events();
 void spawn_fish(Fish fish);
 void destroy_fish(int idx);
+void add_eat_event(int event);
+void clear_eat_events();
 
 #endif

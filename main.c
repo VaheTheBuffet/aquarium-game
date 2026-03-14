@@ -17,13 +17,26 @@ static Node FISH_POOL;
 static Food FOOD[MAX_FOOD];
 static Node FOOD_POOL;
 
+static int EAT_EVENTS[MAX_FOOD];
+static int EAT_ARENA;
+
 static Texture PANEL;
+Image PANEL_MASK;
 
 int main() 
 {
     InitWindow(WIDTH, HEIGHT, TITLE);
-
     PANEL = LoadTexture("./assets/panel-wide.png");
+    PANEL_MASK = LoadImageFromTexture(PANEL);
+
+    unsigned int *pixels = (unsigned int *)PANEL_MASK.data;
+    for(int x = 0; x < PANEL.width; x++) {
+        for(int y = 0; y < PANEL.height; y++) {
+            if(((pixels[x + y * PANEL.width] >> 16) & 0xFF) >= 0x70) {
+                pixels[x + y * PANEL.width] = 0xFF000000;
+            }
+        }
+    }
 
     init_game();
 
@@ -79,11 +92,19 @@ void update()
 
 void handle_input()
 {
+    float scale_x = PANEL.width / WIDTH;
+    float scale_y = PANEL.height / MENU_PAD;
+
     if(IsMouseButtonPressed(0)) {
         Vector2 pos = GetMousePosition();
         if(pos.y < MENU_PAD) {
-            pos.y = MENU_PAD;
-        }
+            unsigned int * pixels = (unsigned int *)PANEL_MASK.data;
+            int x = pos.x * scale_x;
+            int y = pos.y * scale_y;
+            if((pixels[x + y * PANEL_MASK.width] & 0xFFFFFF) == 0x000000) {
+                printf("pressed\n");
+            } 
+        } 
         
         place_food((Food){pos, 0});
     }
@@ -108,7 +129,7 @@ void update_hunger()
         } else if(cur_fish->tracking_status & SUCCESS) {
             cur_fish->hunger += 5;
         } else if (cur_fish->hunger > 5){
-            cur_fish->hunger -= 1.0f * GetFrameTime();
+            cur_fish->hunger -= 0.3f * GetFrameTime();
         } else {
             destroy_fish(i);
         }
@@ -146,7 +167,7 @@ void update_tracking()
         }
         Fish *cur_fish = FISHES + i;
 
-        if(~(cur_fish->tracking_status & TRACKING)) {
+        if(cur_fish->tracking_status & ~TRACKING) {
             int min_dist_idx = -1;
             float min_dist = FLT_MAX;
 
@@ -162,7 +183,7 @@ void update_tracking()
                 }
             }
 
-            if(min_dist_idx != -1) {
+            if(min_dist_idx != -1 && min_dist < FISH_RANGE) {
                 cur_fish->tracking_status = TRACKING;
                 cur_fish->tracking_food = min_dist_idx;
             } else {
@@ -261,7 +282,6 @@ void draw_debug()
     DrawText(debug_text, 0, 0, 20, RAYWHITE);
     sprintf(debug_text, "Tracking: %s ", FISHES[0].tracking_food == RANDOM_TRACKING ? "random" : "food");
     DrawText(debug_text, 0, 22, 20, RAYWHITE);
-
 }
 
 void draw_food()
@@ -335,4 +355,14 @@ void destroy_fish(int idx)
     FISHES[idx].tracking_status = DEAD;
     ((Node *)(FISHES + idx))->next = FISH_POOL.next;
     FISH_POOL.next = (Node *)(FISHES + idx);
+}
+
+void add_eat_event(int event)
+{
+    EAT_EVENTS[EAT_ARENA++] = event;
+}
+
+void clear_eat_events()
+{
+    EAT_ARENA = 0;
 }
